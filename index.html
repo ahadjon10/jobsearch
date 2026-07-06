@@ -363,6 +363,31 @@
             color: #333;
         }
 
+        .alert {
+            padding: 12px 20px;
+            margin: 10px 0;
+            border-radius: 6px;
+            font-size: 14px;
+            animation: slideDown 0.3s ease;
+        }
+
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        @keyframes slideDown {
+            from { transform: translateY(-20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
         @media (max-width: 768px) {
             .header {
                 flex-direction: column;
@@ -408,6 +433,10 @@
                     <div class="stat-number" id="acceptedCount">0</div>
                     <div class="stat-label">Accepted</div>
                 </div>
+                <div class="stat">
+                    <div class="stat-number" id="pendingCount">0</div>
+                    <div class="stat-label">Pending</div>
+                </div>
             </div>
             <button class="btn btn-primary" onclick="openAddJobModal()">+ Add Job</button>
         </div>
@@ -420,8 +449,11 @@
                 placeholder="Search by company, title, or status..."
                 onkeyup="filterTable()"
             >
-            <button class="btn btn-secondary" onclick="exportData()">📥 Export</button>
+            <button class="btn btn-secondary" onclick="exportToExcel()">📊 Export to Excel</button>
+            <button class="btn btn-secondary" onclick="exportToCSV()">📥 Export CSV</button>
         </div>
+
+        <div id="alertContainer"></div>
 
         <div class="table-wrapper">
             <table id="jobsTable">
@@ -528,6 +560,7 @@
         </div>
     </div>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.min.js"></script>
     <script>
         let jobs = [];
         let editingId = null;
@@ -545,13 +578,38 @@
 
         // Load from localStorage
         function loadJobs() {
-            const data = localStorage.getItem('jobs');
-            jobs = data ? JSON.parse(data) : [];
+            try {
+                const data = localStorage.getItem('jobs');
+                jobs = data ? JSON.parse(data) : [];
+            } catch (e) {
+                console.error('Error loading jobs:', e);
+                jobs = [];
+            }
         }
 
         // Save to localStorage
         function saveJobs() {
-            localStorage.setItem('jobs', JSON.stringify(jobs));
+            try {
+                localStorage.setItem('jobs', JSON.stringify(jobs));
+                showAlert('✅ Jobs saved successfully', 'success');
+            } catch (e) {
+                console.error('Error saving jobs:', e);
+                showAlert('❌ Error saving jobs', 'error');
+            }
+        }
+
+        // Show alert message
+        function showAlert(message, type) {
+            const container = document.getElementById('alertContainer');
+            const alertDiv = document.createElement('div');
+            alertDiv.className = `alert alert-${type}`;
+            alertDiv.textContent = message;
+            container.innerHTML = '';
+            container.appendChild(alertDiv);
+            
+            setTimeout(() => {
+                alertDiv.remove();
+            }, 3000);
         }
 
         // Load sample data (existing jobs)
@@ -600,7 +658,7 @@
                     id: 4,
                     company: "E-REGIO",
                     title: "Praktikant (m/w/d)",
-                    description: "Role: General internship for students unsure about career path. Specify: type (Schülerpraktikum, Umschulung, etc.), location, duration, area (commercial/technical), focus.",
+                    description: "Role: General internship for students unsure about career path. Specify: type (Schülerpraktikum, Umschulung, etc.), location, duration, area (commercial/technical).",
                     jobLink: "",
                     dateApplied: "2026-06-07",
                     source: "LinkedIn",
@@ -656,13 +714,13 @@
             
             tbody.innerHTML = visibleJobs.map(job => `
                 <tr>
-                    <td><strong>${job.company}</strong></td>
-                    <td>${job.title}</td>
+                    <td><strong>${escapeHtml(job.company)}</strong></td>
+                    <td>${escapeHtml(job.title)}</td>
                     <td>${formatDate(job.dateApplied)}</td>
-                    <td>${job.source || '-'}</td>
+                    <td>${escapeHtml(job.source || '-')}</td>
                     <td>
                         <span class="status-${job.status.toLowerCase()}">
-                            ${job.status}
+                            ${escapeHtml(job.status)}
                         </span>
                     </td>
                     <td>
@@ -673,6 +731,18 @@
                     </td>
                 </tr>
             `).join('');
+        }
+
+        // Escape HTML to prevent XSS
+        function escapeHtml(text) {
+            const map = {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            };
+            return text.replace(/[&<>"']/g, m => map[m]);
         }
 
         // Get visible jobs (filtered and sorted)
@@ -723,7 +793,9 @@
         function updateStats() {
             document.getElementById('totalJobs').textContent = jobs.length;
             const accepted = jobs.filter(j => j.status === 'Accepted').length;
+            const pending = jobs.filter(j => j.status === 'Pending').length;
             document.getElementById('acceptedCount').textContent = accepted;
+            document.getElementById('pendingCount').textContent = pending;
         }
 
         // Open add job modal
@@ -739,6 +811,7 @@
         function closeJobModal() {
             document.getElementById('jobModal').classList.remove('active');
             document.getElementById('jobForm').reset();
+            editingId = null;
         }
 
         // Edit job
@@ -780,7 +853,7 @@
             };
 
             if (!jobData.company || !jobData.title || !jobData.dateApplied || !jobData.status) {
-                alert('Please fill in all required fields (marked with *)');
+                showAlert('❌ Please fill in all required fields (marked with *)', 'error');
                 return;
             }
 
@@ -788,11 +861,13 @@
                 const job = jobs.find(j => j.id === editingId);
                 if (job) {
                     Object.assign(job, jobData);
+                    showAlert('✏️ Job updated successfully', 'success');
                 }
                 editingId = null;
             } else {
                 jobData.id = Date.now();
                 jobs.unshift(jobData);
+                showAlert('➕ Job added successfully', 'success');
             }
 
             saveJobs();
@@ -808,13 +883,14 @@
                 saveJobs();
                 renderTable();
                 updateStats();
+                showAlert('🗑️ Job deleted successfully', 'success');
             }
         }
 
-        // Export data
-        function exportData() {
+        // Export to CSV
+        function exportToCSV() {
             if (jobs.length === 0) {
-                alert('No data to export');
+                showAlert('❌ No data to export', 'error');
                 return;
             }
             
@@ -824,6 +900,53 @@
             link.href = URL.createObjectURL(blob);
             link.download = `job-tracker-${new Date().toISOString().split('T')[0]}.csv`;
             link.click();
+            showAlert('📥 CSV exported successfully', 'success');
+        }
+
+        // Export to Excel
+        function exportToExcel() {
+            if (jobs.length === 0) {
+                showAlert('❌ No data to export', 'error');
+                return;
+            }
+
+            try {
+                const ws_data = [
+                    ['Company', 'Job Title', 'Description', 'Job Link', 'Date Applied', 'Source', 'Experience Required', 'Rejection Reason', 'Status', 'Notes']
+                ];
+                
+                jobs.forEach(job => {
+                    ws_data.push([
+                        job.company,
+                        job.title,
+                        job.description,
+                        job.jobLink,
+                        job.dateApplied,
+                        job.source,
+                        job.expRequired,
+                        job.rejectionReason,
+                        job.status,
+                        job.notes
+                    ]);
+                });
+
+                const ws = XLSX.utils.aoa_to_sheet(ws_data);
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, 'Job Applications');
+                
+                // Set column widths
+                ws['!cols'] = [
+                    { wch: 20 }, { wch: 30 }, { wch: 40 }, { wch: 35 },
+                    { wch: 15 }, { wch: 15 }, { wch: 20 }, { wch: 25 },
+                    { wch: 12 }, { wch: 30 }
+                ];
+
+                XLSX.writeFile(wb, `job-tracker-${new Date().toISOString().split('T')[0]}.xlsx`);
+                showAlert('📊 Excel file exported successfully', 'success');
+            } catch (e) {
+                console.error('Error exporting to Excel:', e);
+                showAlert('❌ Error exporting to Excel', 'error');
+            }
         }
 
         // Convert to CSV
