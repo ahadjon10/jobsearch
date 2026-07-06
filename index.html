@@ -587,7 +587,7 @@
                     id: 3,
                     company: "GERL.",
                     title: "Werkstudent:in Marketing (m/w/d)",
-                    description: "Role: Create and send newsletters; maintain intranet content; support ongoing projects; daily business support; create/maintain small graphics; support administr[...]
+                    description: "Role: Create and send newsletters; maintain intranet content; support ongoing projects; daily business support; create/maintain small graphics; support administrative tasks.",
                     jobLink: "",
                     dateApplied: "2026-06-07",
                     source: "LinkedIn",
@@ -600,7 +600,7 @@
                     id: 4,
                     company: "E-REGIO",
                     title: "Praktikant (m/w/d)",
-                    description: "Role: General internship for students unsure about career path. Specify: type (Schülerpraktikum, Umschulung, etc.), location, duration, area (commercial/technic[...]
+                    description: "Role: General internship for students unsure about career path. Specify: type (Schülerpraktikum, Umschulung, etc.), location, duration, area (commercial/technical), focus.",
                     jobLink: "",
                     dateApplied: "2026-06-07",
                     source: "LinkedIn",
@@ -613,7 +613,7 @@
                     id: 5,
                     company: "Finance Werkstudent",
                     title: "Werkstudent:in Finance (m/w/d)",
-                    description: "Role: Support management in daily finance/accounting operations; work in systems; capture and check documents; implement clean/transparent/scalable financial pro[...]
+                    description: "Role: Support management in daily finance/accounting operations; work in systems; capture and check documents; implement clean/transparent/scalable financial processes.",
                     jobLink: "",
                     dateApplied: "2026-06-07",
                     source: "LinkedIn",
@@ -738,6 +738,7 @@
         // Close modal
         function closeJobModal() {
             document.getElementById('jobModal').classList.remove('active');
+            document.getElementById('jobForm').reset();
         }
 
         // Edit job
@@ -766,23 +767,29 @@
             event.preventDefault();
 
             const jobData = {
-                company: document.getElementById('company').value,
-                title: document.getElementById('title').value,
-                description: document.getElementById('description').value,
-                jobLink: document.getElementById('jobLink').value,
+                company: document.getElementById('company').value.trim(),
+                title: document.getElementById('title').value.trim(),
+                description: document.getElementById('description').value.trim(),
+                jobLink: document.getElementById('jobLink').value.trim(),
                 dateApplied: document.getElementById('dateApplied').value,
                 source: document.getElementById('source').value,
-                expRequired: document.getElementById('expRequired').value,
-                rejectionReason: document.getElementById('rejectionReason').value,
+                expRequired: document.getElementById('expRequired').value.trim(),
+                rejectionReason: document.getElementById('rejectionReason').value.trim(),
                 status: document.getElementById('status').value,
-                notes: document.getElementById('notes').value
+                notes: document.getElementById('notes').value.trim()
             };
+
+            if (!jobData.company || !jobData.title || !jobData.dateApplied || !jobData.status) {
+                alert('Please fill in all required fields (marked with *)');
+                return;
+            }
 
             if (editingId) {
                 const job = jobs.find(j => j.id === editingId);
                 if (job) {
                     Object.assign(job, jobData);
                 }
+                editingId = null;
             } else {
                 jobData.id = Date.now();
                 jobs.unshift(jobData);
@@ -796,7 +803,7 @@
 
         // Delete job
         function deleteJob(id) {
-            if (confirm('Are you sure you want to delete this job?')) {
+            if (confirm('Are you sure you want to delete this job application?')) {
                 jobs = jobs.filter(j => j.id !== id);
                 saveJobs();
                 renderTable();
@@ -806,6 +813,11 @@
 
         // Export data
         function exportData() {
+            if (jobs.length === 0) {
+                alert('No data to export');
+                return;
+            }
+            
             const csv = convertToCSV(jobs);
             const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
             const link = document.createElement('a');
@@ -831,7 +843,7 @@
             ]);
 
             const csv = [headers, ...rows]
-                .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+                .map(row => row.map(cell => `"${String(cell || '').replace(/"/g, '""')}"`).join(','))
                 .join('\n');
 
             return csv;
